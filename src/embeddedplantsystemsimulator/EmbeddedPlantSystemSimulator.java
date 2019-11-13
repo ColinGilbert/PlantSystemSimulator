@@ -101,10 +101,10 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / MILLIS_IN_SEC;
         }
         deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / MILLIS_IN_MIN;
-        int lastRecordedCO2Level = transientState.getCO2PPM();
+        int lastRecordedCO2Level = transientState.getCurrentCO2PPM();
         double lastRecordedTemperature = (double) transientState.getUpperChamberTemperature();
         double lastRecordedHumidity = (double) transientState.getUpperChamberHumidity();
-        transientState.setCO2PPM(Math.max(0, lastRecordedCO2Level + deltaCO2));
+        transientState.setCurrentCO2PPM(Math.max(0, lastRecordedCO2Level + deltaCO2));
         float upperChamberTemperature = Math.min(maxTemperature, Math.max((float) (lastRecordedTemperature + deltaTemperature), minTemperature));
         transientState.setUpperChamberTemperature(upperChamberTemperature);
         float upperChamberHumidity = Math.min(100.f, Math.max((float) (lastRecordedHumidity + deltaHumidity), 0.f));
@@ -117,7 +117,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 transientState.setTimeLeftUnlocked(0);
             }
         }
-        if (transientState.getCO2PPM() > persistedState.getTargetCO2PPM()) {
+        if (transientState.getCurrentCO2PPM() > persistedState.getTargetCO2PPM()) {
             transientState.setInjectingCO2(false);
         } else {
             transientState.setInjectingCO2(true);

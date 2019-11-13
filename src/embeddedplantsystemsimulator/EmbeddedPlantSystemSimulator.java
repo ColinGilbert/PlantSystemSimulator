@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonGenerator;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+import java.lang.Math;
 
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
@@ -72,25 +73,19 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         long currentTime = System.currentTimeMillis();
         long deltaTime = currentTime - lastRecordedTime;
         lastRecordedTime = currentTime;
-        
         timeSinceLastUpdatePush += deltaTime;
+        
         if(timeSinceLastUpdatePush > persistedState.getStatusUpdatePushInterval())
         {
             pushTransientState();
             timeSinceLastUpdatePush = 0;
         }
-        
-        if (deltaTime < 1000) {
-            return;
-        }
 
         double deltaTemperature = 0.0d;
         double deltaHumidity = 0.0d;
         int deltaCO2 = 0;
-
         final double MILLIS_IN_SEC = 1000.0d;
         final double MILLIS_IN_MIN = 60000.0d;
-
         if (transientState.isLit()) {
             deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / MILLIS_IN_MIN;
             deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / MILLIS_IN_MIN;
@@ -105,17 +100,15 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         if (transientState.isInjectingCO2()) {
             deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / MILLIS_IN_SEC;
         }
-
         deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / MILLIS_IN_MIN;
-
         int lastRecordedCO2Level = transientState.getCO2PPM();
         double lastRecordedTemperature = (double) transientState.getUpperChamberTemperature();
         double lastRecordedHumidity = (double) transientState.getUpperChamberHumidity();
-
-        transientState.setCO2PPM(lastRecordedCO2Level + deltaCO2);
-        transientState.setUpperChamberTemperature((float) (lastRecordedTemperature + deltaTemperature));
-        transientState.setUpperChamberHumidity((float) (lastRecordedHumidity + deltaHumidity));
-
+        transientState.setCO2PPM(Math.max(0, lastRecordedCO2Level + deltaCO2));
+        float upperChamberTemperature = Math.min(maxTemperature, Math.max((float) (lastRecordedTemperature + deltaTemperature), minTemperature));
+        transientState.setUpperChamberTemperature(upperChamberTemperature);
+        float upperChamberHumidity = Math.min(100.f, Math.max((float) (lastRecordedHumidity + deltaHumidity), 0.f));
+        transientState.setUpperChamberHumidity(upperChamberHumidity);
         if (!transientState.isLocked()) {
             long lastRecordedTimeLeftUnlocked = transientState.getTimeLeftUnlocked();
             long timeLeftUnlocked = lastRecordedTimeLeftUnlocked - deltaTime;
@@ -124,19 +117,16 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 transientState.setTimeLeftUnlocked(0);
             }
         }
-
         if (transientState.getCO2PPM() > persistedState.getTargetCO2PPM()) {
             transientState.setInjectingCO2(false);
         } else {
             transientState.setInjectingCO2(true);
         }
-
         if (transientState.getUpperChamberHumidity() > persistedState.getTargetUpperChamberHumidity()) {
             transientState.setDehumidifying(true);
         } else {
             transientState.setDehumidifying(false);
         }
-
         if (transientState.getUpperChamberTemperature() > persistedState.getTargetUpperChamberTemperature()) {
             transientState.setCooling(true);
         } else {
@@ -150,13 +140,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
     public void connect() {
         connect(brokerURL);
-        /*
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException ex) {
-            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
-        }
-*/
         subscribeToEmbeddedConfigPush();
     }
     
@@ -242,12 +225,47 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
        if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + persistedState.getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
-                PersistentArduinoState receivedState = objectMapper.readValue(message.toString().getBytes(), PersistentArduinoState.class);
+                ArduinoConfigChangeRepresentation receivedState = objectMapper.readValue(message.toString().getBytes(), ArduinoConfigChangeRepresentation.class);
                 if (persistedState.getUid() != receivedState.getUid()) {
                     log("LOGICAL ERROR: Received invalid UID as configuration. Our UID = " + persistedState.getUid() + ", assigned UID = " + receivedState.getUid());
                     return;
                 }
-                persistedState = receivedState;
+               if (receivedState.isChangingMistingInterval()) {
+                    persistedState.setMistingInterval(receivedState.getMistingInterval());
+                }
+                if (receivedState.isChangingMistingDuration()) {
+                    persistedState.setMistingDuration(receivedState.getMistingDuration());
+                }
+                if (receivedState.isChangingStatusUpdatePushInterval()) {
+                    persistedState.setStatusUpdatePushInterval(receivedState.getStatusUpdatePushInterval());
+                }
+                if (receivedState.isChangingNutrientsPPM()) {
+                    persistedState.setNutrientsPPM(receivedState.getNutrientsPPM());
+                }
+                if (receivedState.isChangingNutrientSolutionRatio()) {
+                    persistedState.setNutrientSolutionRatio(receivedState.getNutrientSolutionRatio());
+                }
+                if (receivedState.isChangingLightsOnTime()) {
+                    persistedState.setLightsOnTime(receivedState.getLightsOnTime());
+                }
+                if (receivedState.isChangingLightsOffTime()) {
+                    persistedState.setLightsOffTime(receivedState.getLightsOffTime());
+                }
+                if (receivedState.isChangingTargetUpperChamberHumidity()) {
+                    persistedState.setTargetUpperChamberHumidity(receivedState.getTargetUpperChamberHumidity());
+                }
+                if (receivedState.isChangingTargetUpperChamberTemperature()) {
+                    persistedState.setTargetUpperChamberTemperature(receivedState.getTargetUpperChamberTemperature());
+                }
+                if (receivedState.isChangingTargetLowerChamberTemperature()) {
+                    persistedState.setTargetLowerChamberTemperature(receivedState.getTargetLowerChamberTemperature());
+                }
+                if (receivedState.isChangingTargetCO2PPM()) {
+                    persistedState.setTargetCO2PPM(receivedState.getTargetCO2PPM());
+                }
+                if (!started) {
+                    started = true;
+                }
                 System.out.println("Got state push. " + message.toString());
             } catch (IOException ex) {
                 Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
@@ -257,8 +275,9 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             log("Received unsubscribed MQTT topic");
 
         }
-    }
-
+    } 
+    
+    
     // End of MQTT callbacks
     // Internals
     private void log(String arg) {
@@ -267,31 +286,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         }
     }
 
-    /*
-    
-    public void setUID(long arg);
 
-    public void setMistingInterval(int arg);
-    
-    public void setMistingDuration(int arg);
-    
-    public void setStatusUpdatePushInterval(int arg);
-    
-    public void setNutrientSolutionRatio(double arg);
-    
-    public void setLightsOnTime(long arg);
-    
-    public void setLightsOffTime(long arg);
-    
-    public void setTargetUpperChamberHumidity(float arg);
-    
-    public void setTargetUpperChamberTemperature(float arg);
-    
-  //  public void setTargetLowerChamberTemperature(float arg);
-    
-    public void setTargetCO2PPM(int arg);
-    
-     */
     // String topic = "MQTT Examples";
     // String content = "Message from MqttPublishSample";
     protected PersistentArduinoState persistedState;
@@ -305,7 +300,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     protected MqttClient client;
     protected MqttConnectOptions connectionOptions;
 
-    boolean subscribedToStatePush = false;
+    boolean started = false;
 
     float maxTemperature = 60.0f;
     float minTemperature = 10.0f;

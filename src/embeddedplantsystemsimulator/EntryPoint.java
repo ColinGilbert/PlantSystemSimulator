@@ -5,6 +5,9 @@
  */
 package embeddedplantsystemsimulator;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  *
  * @author noob
@@ -18,10 +21,17 @@ public class EntryPoint {
 
         sim.setLogging(true);
 
+        sim.init();
         sim.connect();
 
-        while (true) {
-            sim.simulationLoop();
+
+        while(true) {
+           sim.simulationLoop();
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(EntryPoint.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
 
     }

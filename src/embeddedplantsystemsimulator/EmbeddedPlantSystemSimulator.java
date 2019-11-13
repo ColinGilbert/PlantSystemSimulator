@@ -32,35 +32,33 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import noob.plantsystem.common.*;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
     EmbeddedPlantSystemSimulator(long uidArg) {
-
-        persistence = new MemoryPersistence();
-
-        transientState = new TransientArduinoState();
-        persistedState = new PersistentArduinoState();
-
+        
+        ArduinoProxy proxy = ArduinoProxySaneDefaultsFactory.get();
+        transientState = proxy.extractTransientState();
+        persistedState = proxy.extractPersistentState();
         transientState.setUpperChamberTemperature(23.0f);
         transientState.setLowerChamberTemperature(18.0f);
         transientState.setUpperChamberHumidity(50.0f);
-
-        persistedState.setUID(uidArg);
-
-        topic = TopicStrings.statePushToEmbedded();
-        topic += "/";
-        topic += persistedState.getUID();
-
+        persistedState.setUid(uidArg);
         connectionOptions = new MqttConnectOptions();
         connectionOptions.setCleanSession(true);
-        try {
-            client = new MqttClient(brokerURL, Long.toString(uidArg));
+    }
 
-        } catch (MqttException e) {
-            log("Could not setup mqtt client in constructor. Cause: " + e);
+    void init() {
+        try {
+            client = new MqttClient(brokerURL, Long.toString(persistedState.getUid()), new MemoryPersistence());
+            client.setCallback(this);
+
+        } catch (MqttException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
@@ -73,7 +71,15 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
         long currentTime = System.currentTimeMillis();
         long deltaTime = currentTime - lastRecordedTime;
-
+        lastRecordedTime = currentTime;
+        
+        timeSinceLastUpdatePush += deltaTime;
+        if(timeSinceLastUpdatePush > persistedState.getStatusUpdatePushInterval())
+        {
+            pushTransientState();
+            timeSinceLastUpdatePush = 0;
+        }
+        
         if (deltaTime < 1000) {
             return;
         }
@@ -85,18 +91,18 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         final double MILLIS_IN_SEC = 1000.0d;
         final double MILLIS_IN_MIN = 60000.0d;
 
-        if (transientState.getLights()) {
+        if (transientState.isLit()) {
             deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / MILLIS_IN_MIN;
             deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / MILLIS_IN_MIN;
             deltaCO2 -= (long) ((double) deltaTime * lightsOnCO2LossPerMin / MILLIS_IN_MIN);
         }
-        if (transientState.getDehumidifying()) {
+        if (transientState.isDehumidifying()) {
             deltaHumidity -= (double) deltaTime * dehumidifyHumidityLossPerMin / MILLIS_IN_MIN;
         }
-        if (transientState.getCooling()) {
+        if (transientState.isCooling()) {
             deltaTemperature -= (double) deltaTime * coolingHeatLossPerMin / MILLIS_IN_MIN;
         }
-        if (transientState.getInjectingCO2()) {
+        if (transientState.isInjectingCO2()) {
             deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / MILLIS_IN_SEC;
         }
 
@@ -110,11 +116,11 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         transientState.setUpperChamberTemperature((float) (lastRecordedTemperature + deltaTemperature));
         transientState.setUpperChamberHumidity((float) (lastRecordedHumidity + deltaHumidity));
 
-        if (!transientState.getLocked()) {
+        if (!transientState.isLocked()) {
             long lastRecordedTimeLeftUnlocked = transientState.getTimeLeftUnlocked();
             long timeLeftUnlocked = lastRecordedTimeLeftUnlocked - deltaTime;
             if (timeLeftUnlocked < 1) {
-                transientState.setDoorsLocked(false);
+                transientState.setLocked(false);
                 transientState.setTimeLeftUnlocked(0);
             }
         }
@@ -143,72 +149,78 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     public void connect() {
-        connect(brokerURL, 1);
-        sendHello();
-    }
-
-    protected void sendHello() {
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        String json;
+        connect(brokerURL);
+        /*
         try {
-         json = objectMapper.writeValueAsString(persistedState);
-        } catch (JsonProcessingException e) {
-            log("Could not turn hello message into JSON: " + e);
+            Thread.sleep(500);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
+        }
+*/
+        subscribeToEmbeddedConfigPush();
+    }
+    
+    void pushTransientState() {
+        EmbeddedStatusReport state = new EmbeddedStatusReport();
+        state.setUid(persistedState.getUid());
+        state.setTimestamp(System.currentTimeMillis());
+        state.makeFromTransientState(transientState);
+        ObjectMapper objMapper = new ObjectMapper();
+        String message = "";
+        try {
+             message = objMapper.writeValueAsString(state);
+        } catch (JsonProcessingException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
             return;
         }
         try {
-            publish(TopicStrings.embeddedHello(), 1, json.getBytes());
-        } catch (MqttException e) {
-            log("COuld not send Hello via MQTT: " + e);
+            publish(TopicStrings.embeddedTransientStatePush() + "/" + persistedState.getUid(), 2, message.getBytes());
+        } catch (MqttException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
-        log("Sent Hello!");
     }
-
-    protected void publish(String topicName, int qos, byte[] payload) throws MqttException {
-        client.connect(connectionOptions);
-
-        // Create and configure a message
-        MqttMessage message = new MqttMessage(payload);
-        message.setQos(qos);
-
-        client.publish(topicName, message);
-
-        client.disconnect();
-        
-        
-        log("Message published! Topic = " + topicName + ", qos = " + qos + " Payload: " + payload);
-
-    }
-
-    protected void connect(String broker, int qos) {
-        if (qos < 0) {
-            qos = 0;
-        }
-        if (qos > 2) {
-            qos = 2;
-        }
+    
+    protected void connect(String brokers) {
 
         // Connect to the MQTT server
         try {
             client.connect(connectionOptions);
             log("Connected to " + brokerURL + " with client ID " + client.getClientId());
-        } catch (MqttSecurityException e) {
-            log("MQTT Security exception caught while connecting: " + e);
-        } catch (MqttException e) {
-            log("MQTTException caught while connecting: " + e);
+        } catch (MqttSecurityException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
+            return;
+        } catch (MqttException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
+            return;
         }
-        log("Subscribing to topic \"" + topic + "\" qos " + qos);
+        //  try {
+        //     client.disconnect();
+        //  } catch (MqttException ex) {
+        //     Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
+        //     return;
+        // }
+    }
+
+    protected void publish(String topicName, int qos, byte[] payload) throws MqttException {
+        // Create and configure a message
+        MqttMessage message = new MqttMessage(payload);
+        message.setQos(qos);
+        message.setRetained(false);
+        client.publish(topicName, message);
+        //client.disconnect();
+        log("Message published! Topic = " + topicName + ", qos = " + qos + " Payload: " + payload);
+    }
+
+    protected void subscribeToEmbeddedConfigPush() {
+        String topic = TopicStrings.configPushToEmbedded() + "/" + persistedState.getUid();
         try {
-            client.subscribe(topic, qos);
-        } catch (MqttException e) {
-            log("Caught MqttException while trying to subscribe" + e);
+            client.subscribe(topic);
+        } catch (MqttException ex) {
+            Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
+            return;
         }
-        try {
-            client.disconnect();
-        } catch (MqttException e) {
-            log("Caught MqttException while trying to disconnect after subscribing.");
-        }
+        log("Subscribed to: " + topic);
+
     }
 
     // MQTT callbacks
@@ -216,7 +228,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     public void connectionLost(Throwable cause) {
         log("Connection lost... Cause:" + cause);
         // TODO: Implement reconnect?
-
     }
 
     @Override
@@ -226,25 +237,26 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
     @Override
     public void messageArrived(String topicArg, MqttMessage message) throws MqttException {
-        if (topicArg.equals(topic)) {
+        log("MQTT message received. Topic = " + topicArg + ", message = " + message);
+
+       if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + persistedState.getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
                 PersistentArduinoState receivedState = objectMapper.readValue(message.toString().getBytes(), PersistentArduinoState.class);
-                if (persistedState.getUID() != receivedState.getUID()) {
-                    log("LOGICAL ERROR: Received invalid UID as configuration. Our UID = " + persistedState.getUID() + ", assigned UID = " + receivedState.getUID());
+                if (persistedState.getUid() != receivedState.getUid()) {
+                    log("LOGICAL ERROR: Received invalid UID as configuration. Our UID = " + persistedState.getUid() + ", assigned UID = " + receivedState.getUid());
                     return;
                 }
-            } catch (IOException e) {
-                log("Could not convert MQTT message to PersistentArduinoState. Cause: " + e);
+                persistedState = receivedState;
+                System.out.println("Got state push. " + message.toString());
+            } catch (IOException ex) {
+                Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
                 return;
             }
-            if (!handshakeCompleted) {
-                handshakeCompleted = true;
-            }
         } else {
-            log("Received unsubscribed MQTT topic: " + topic);
+            log("Received unsubscribed MQTT topic");
+
         }
-        log("MQTT message received. Topic = " + topic + ", message = " + message);
     }
 
     // End of MQTT callbacks
@@ -282,18 +294,22 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
      */
     // String topic = "MQTT Examples";
     // String content = "Message from MqttPublishSample";
-    protected PersistentArduinoState persistedState;// = new PersistentArduinoState();
-    protected TransientArduinoState transientState;// = new TransientArduinoState();
-    protected boolean handshakeCompleted = false;
+    protected PersistentArduinoState persistedState;
+    protected TransientArduinoState transientState;
+    // protected boolean handshakeCompleted = false;
     protected boolean persistentStateLoaded = false;
     protected boolean logging = true;
     protected String brokerURL = "tcp://127.0.0.1:1883";
-    protected String topic;
-    protected MemoryPersistence persistence;// = new MemoryPersistence();
+    protected MemoryPersistence persistence;
     protected long deltaTime;
     protected MqttClient client;
     protected MqttConnectOptions connectionOptions;
 
+    boolean subscribedToStatePush = false;
+
+    float maxTemperature = 60.0f;
+    float minTemperature = 10.0f;
+    
     double dehumidifyHumidityLossPerMin = 1.0d;
     double dehumidifyHeatPerMin = 0.3d;
     double coolingHeatLossPerMin = 1.0d;
@@ -305,4 +321,5 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     long lastRecordedTime;
     long timeSinceLastMisting = 0;
     long currentMistingDuration = 0;
+    long timeSinceLastUpdatePush = 0;
 }

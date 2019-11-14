@@ -70,19 +70,20 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     long currentMistingDuration = 0;
     long timeSinceLastUpdatePush = 0;
     
-    EmbeddedPlantSystemSimulator(long uidArg) {
+    EmbeddedPlantSystemSimulator() {
 
         ArduinoProxy proxy = ArduinoProxySaneDefaultsFactory.get();
 
         proxy.setCurrentUpperChamberTemperature(23.0f);
         proxy.setCurrentLowerChamberTemperature(18.0f);
         proxy.setCurrentUpperChamberHumidity(50.0f);
-        proxy.setUid(uidArg);
+
         connectionOptions = new MqttConnectOptions();
         connectionOptions.setCleanSession(true);
     }
 
-    void init() {
+    void init(long uid) {
+        proxy.setUid(uid);
         try {
             client = new MqttClient(brokerURL, MqttClient.generateClientId(), new MemoryPersistence());
             client.setCallback(this);
@@ -287,10 +288,8 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             log("Connected to " + brokerURL + " with client ID " + client.getClientId());
         } catch (MqttSecurityException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
-            return;
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
-            return;
         }
         //  try {
         //     client.disconnect();
@@ -311,7 +310,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     protected void subscribeToEmbeddedConfigPush() {
-        final String topic = TopicStrings.configPushToEmbedded();
+        String topic = TopicStrings.configPushToEmbedded() + "/" + proxy.getUid();
         try {
             client.subscribe(topic);
         } catch (MqttException ex) {

@@ -17,10 +17,9 @@ public class EntryPoint {
     
     
     public static void main(String[] args) {
-        long uid = 999;
-        EmbeddedPlantSystemSimulator sim = new EmbeddedPlantSystemSimulator(uid);
+        EmbeddedPlantSystemSimulator sim = new EmbeddedPlantSystemSimulator();
         sim.setLogging(true);
-        sim.init();
+        sim.init(999);
         sim.connect();        
 
         while(true) {
@@ -31,9 +30,5 @@ public class EntryPoint {
                 Logger.getLogger(EntryPoint.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-    }
-    
-    
-    
-    
+    }      
 }

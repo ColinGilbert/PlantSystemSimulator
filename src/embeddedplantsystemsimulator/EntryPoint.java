@@ -14,16 +14,14 @@ import java.util.logging.Logger;
  */
 public class EntryPoint {
 
+    
+    
     public static void main(String[] args) {
         long uid = 999;
-
         EmbeddedPlantSystemSimulator sim = new EmbeddedPlantSystemSimulator(uid);
-
         sim.setLogging(true);
-
         sim.init();
-        sim.connect();
-
+        sim.connect();        
 
         while(true) {
            sim.simulationLoop();
@@ -33,6 +31,9 @@ public class EntryPoint {
                 Logger.getLogger(EntryPoint.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-
     }
+    
+    
+    
+    
 }

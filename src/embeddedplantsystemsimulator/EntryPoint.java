@@ -26,7 +26,7 @@ public class EntryPoint {
         while(true) {
            sim.simulationLoop();
             try {
-                Thread.sleep(20);
+                Thread.sleep(10);
             } catch (InterruptedException ex) {
                 Logger.getLogger(EntryPoint.class.getName()).log(Level.SEVERE, null, ex);
             }

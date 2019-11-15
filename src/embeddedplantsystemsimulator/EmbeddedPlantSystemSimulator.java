@@ -289,12 +289,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
-        //  try {
-        //     client.disconnect();
-        //  } catch (MqttException ex) {
-        //     Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
-        //     return;
-        // }
     }
 
     protected void publish(String topicName, int qos, byte[] payload) throws MqttException {
@@ -303,8 +297,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         message.setQos(qos);
         message.setRetained(false);
         client.publish(topicName, message);
-        //client.disconnect();
-        // log("Message published! Topic = " + topicName + ", qos = " + qos + " Payload: " + payload);
     }
 
     protected void subscribeToEmbeddedConfigPush() {
@@ -316,7 +308,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             return;
         }
         log("Subscribed to: " + topic);
-
     }
 
     // MQTT callbacks

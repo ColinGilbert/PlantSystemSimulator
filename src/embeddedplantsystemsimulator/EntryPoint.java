@@ -5,6 +5,7 @@
  */
 package embeddedplantsystemsimulator;
 
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,7 +20,7 @@ public class EntryPoint {
     public static void main(String[] args) {
         EmbeddedPlantSystemSimulator sim = new EmbeddedPlantSystemSimulator();
         sim.setLogging(true);
-        sim.init(999);
+        sim.init(Math.abs(new Random().nextLong()));
         sim.connect();        
 
         while(true) {

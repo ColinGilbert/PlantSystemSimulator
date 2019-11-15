@@ -65,14 +65,14 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     int co2InjectionPPMPerSec = 1000;
     int lightsOnCO2LossPerMin = 1000;
     long lastRecordedTime;
-    
+
     long timeSinceLastMisting = 0;
     long currentMistingDuration = 0;
     long timeSinceLastUpdatePush = 0;
-    
+
     EmbeddedPlantSystemSimulator() {
 
-        ArduinoProxy proxy = ArduinoProxySaneDefaultsFactory.get();
+        proxy = ArduinoProxySaneDefaultsFactory.get();
 
         proxy.setCurrentUpperChamberTemperature(23.0f);
         proxy.setCurrentLowerChamberTemperature(18.0f);
@@ -110,11 +110,11 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             pushState();
             timeSinceLastUpdatePush = 0;
         }
-        
+
         double deltaTemperature = 0.0d;
         double deltaHumidity = 0.0d;
         int deltaCO2 = 0;
-        
+
         final boolean currentlyPowered = proxy.isPowered();
         final boolean currentlyLit = proxy.isLit();
         final boolean currentlyOpen = proxy.isOpen();
@@ -126,8 +126,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
         final double MILLIS_IN_SEC = 1000.0d;
         final double MILLIS_IN_MIN = 60000.0d;
-        
-        
+
         if (currentlyPowered) {
             if (currentlyLit) {
                 deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / MILLIS_IN_MIN;
@@ -207,21 +206,20 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             pushEmbeddedEvent(ev);
         } else if (!proxy.isCooling() && currentlyCooling) {
             EmbeddedEventType ev = EmbeddedEventType.COOLING_OFF;
-            pushEmbeddedEvent(ev);           
+            pushEmbeddedEvent(ev);
         }
         if (proxy.isInjectingCO2() && !currentlyInjectingCO2) {
             EmbeddedEventType ev = EmbeddedEventType.CO2_VALVE_OPEN;
-            pushEmbeddedEvent(ev);   
+            pushEmbeddedEvent(ev);
         } else if (!proxy.isInjectingCO2() && currentlyInjectingCO2) {
             EmbeddedEventType ev = EmbeddedEventType.CO2_VALVE_CLOSED;
-            pushEmbeddedEvent(ev);            
+            pushEmbeddedEvent(ev);
         }
 
         // TODO: Lights code 
         lastRecordedTime = currentTime;
     }
 
- 
     protected void pushEmbeddedEvent(EmbeddedEventType ev) {
         ObjectMapper mapper = new ObjectMapper();
         String message = "";
@@ -232,7 +230,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             return;
         }
         try {
-            publish(TopicStrings.embeddedEvent() + "/" + proxy.getUid(), 2, message.getBytes());
+            publish(TopicStrings.embeddedEvent() + "/" + proxy.getUid(), 0, message.getBytes());
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -275,12 +273,12 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             return;
         }
         try {
-            publish(TopicStrings.embeddedStatePush(), 2, message.getBytes());
+            publish(TopicStrings.embeddedStatePush(), 0, message.getBytes());
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
+
     protected void connect(String brokers) {
         // Connect to the MQTT server
         try {
@@ -330,12 +328,12 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
     @Override
     public void deliveryComplete(IMqttDeliveryToken token) {
-      //  log("MQTT message delivered! " + token);
+        //  log("MQTT message delivered! " + token);
     }
 
     @Override
     public void messageArrived(String topicArg, MqttMessage message) throws MqttException {
-       //  log("MQTT message received. Topic = " + topicArg + ", message = " + message);
+        //  log("MQTT message received. Topic = " + topicArg + ", message = " + message);
 
         if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + proxy.getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -382,7 +380,8 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 if (!started) {
                     started = true;
                 }
-                System.out.println("Got state push: " + message.toString());
+                System.out.println("Got updated config : " + message.toString());
+                // pushState();
             } catch (IOException ex) {
                 Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
                 return;

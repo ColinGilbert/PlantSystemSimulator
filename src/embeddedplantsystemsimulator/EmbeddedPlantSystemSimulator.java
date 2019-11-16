@@ -90,6 +90,15 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         connectionOptions.setCleanSession(true);
     }
 
+    long lightsCounter = lightsTimer;
+    long mistingCounter = mistingTimer;
+    long coolingCounter = coolingTimer;
+    long dehumidifyCounter = dehumidifyTimer;
+    long co2Counter = co2Timer;
+    long lockedCounter = lockedTimer;
+
+    Random random = new Random();
+
     void init(long uid) {
         proxy.setUid(uid);
         try {
@@ -103,17 +112,8 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
     public void setLogging(boolean arg) {
         logging = arg;
-    }
-
-    long lightsCounter = lightsTimer;
-    long mistingCounter = mistingTimer;
-    long coolingCounter = coolingTimer;
-    long dehumidifyCounter = dehumidifyTimer;
-    long co2Counter = co2Timer;
-    long lockedCounter = lockedTimer;
-
-    Random random = new Random();
-
+    }     
+   
     // This simulates the values creeping towards their respective equilibria.
     public void simulationLoop() {
 
@@ -181,7 +181,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_OPEN);
             } else {
                 proxy.setInjectingCO2(false);
-
                 pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_CLOSED);
             }
             co2Counter = co2Timer;

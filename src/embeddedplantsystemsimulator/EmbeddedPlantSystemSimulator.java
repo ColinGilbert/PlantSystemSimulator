@@ -39,7 +39,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import noob.plantsystem.common.*;
-import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
     final double MILLIS_IN_SEC = 1000.0d;
@@ -117,7 +116,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         logging = arg;
     }
 
-    // This simulates the values creeping towards their respective equilibria.
     public void simulationLoop() {
 
         final long currentTime = System.currentTimeMillis();
@@ -208,14 +206,14 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         final boolean currentlyLit = proxy.getTransientState().isLit();
         final boolean currentlyOpen = proxy.getTransientState().isOpen();
         final boolean currentlyLocked = proxy.getTransientState().isLocked();
-        // final boolean currentlyMisting = proxy.isMisting();
+        final boolean currentlyMisting = proxy.getTransientState().isMisting();
         final boolean currentlyDehumidifying = proxy.getTransientState().isDehumidifying();
         final boolean currentlyCooling = proxy.getTransientState().isCooling();
         final boolean currentlyInjectingCO2 = proxy.getTransientState().isInjectingCO2();
 
  
-
-        final long timeOfDay = currentTime % MILLIS_IN_DAY; // There are that many milliseconds in a day!
+        final long timeOfDay = currentTime % MILLIS_IN_DAY;
+        
         final boolean lights = shouldTheLightsBeOn(timeOfDay);
 
         proxy.getTransientState().setLit(lights);
@@ -398,10 +396,10 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                     proxy.getPersistentState().setLightsOffHour(receivedState.getPersistentState().getLightsOffHour());
                 }
                 if (receivedState.isChangingLightsOnMinute()) {
-                    proxy.getPersistentState().setLightsOnHour(receivedState.getPersistentState().getLightsOnMinute());
+                    proxy.getPersistentState().setLightsOnMinute(receivedState.getPersistentState().getLightsOnMinute());
                 }
                 if (receivedState.isChangingLightsOffMinute()) {
-                    proxy.getPersistentState().setLightsOffHour(receivedState.getPersistentState().getLightsOffMinute());
+                    proxy.getPersistentState().setLightsOffMinute(receivedState.getPersistentState().getLightsOffMinute());
                 }
                 if (receivedState.isChangingTargetUpperChamberHumidity()) {
                     proxy.getPersistentState().setTargetUpperChamberHumidity(receivedState.getPersistentState().getTargetUpperChamberHumidity());

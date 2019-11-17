@@ -42,7 +42,10 @@ import noob.plantsystem.common.*;
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
-
+    final double MILLIS_IN_SEC = 1000.0d;
+    final double MILLIS_IN_MIN = 60000.0d;
+    final long MILLIS_IN_HOUR = 3600000;
+    final long MILLIS_IN_DAY = 86400000;
     protected ArduinoProxy proxy = new ArduinoProxy();
     protected boolean stateLoaded = false;
     protected boolean logging = true;
@@ -210,9 +213,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         final boolean currentlyCooling = proxy.getTransientState().isCooling();
         final boolean currentlyInjectingCO2 = proxy.getTransientState().isInjectingCO2();
 
-        final double MILLIS_IN_SEC = 1000.0d;
-        final double MILLIS_IN_MIN = 60000.0d;
-        final long MILLIS_IN_DAY = 86400000;
+ 
 
         final long timeOfDay = currentTime % MILLIS_IN_DAY; // There are that many milliseconds in a day!
         final boolean lights = shouldTheLightsBeOn(timeOfDay);
@@ -276,8 +277,9 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     protected boolean shouldTheLightsBeOn(long currentTime) {
-        final long onTime = proxy.getPersistentState().getLightsOnTime();
-        final long offTime = proxy.getPersistentState().getLightsOffTime();
+        final long onTime = proxy.getPersistentState().getLightsOnHour() * MILLIS_IN_HOUR + proxy.getPersistentState().getLightsOnMinute()*(long)MILLIS_IN_MIN;
+        final long offTime = proxy.getPersistentState().getLightsOffHour() * MILLIS_IN_HOUR + proxy.getPersistentState().getLightsOffMinute()*(long)MILLIS_IN_MIN;
+        
         if (onTime < 0 || offTime < 0) {
             return false;
         }
@@ -389,11 +391,17 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 if (receivedState.isChangingNutrientSolutionRatio()) {
                     proxy.getPersistentState().setNutrientSolutionRatio(receivedState.getPersistentState().getNutrientSolutionRatio());
                 }
-                if (receivedState.isChangingLightsOnTime()) {
-                    proxy.getPersistentState().setLightsOnTime(receivedState.getPersistentState().getLightsOnTime());
+                if (receivedState.isChangingLightsOnHour()) {
+                    proxy.getPersistentState().setLightsOnHour(receivedState.getPersistentState().getLightsOnHour());
                 }
-                if (receivedState.isChangingLightsOffTime()) {
-                    proxy.getPersistentState().setLightsOffTime(receivedState.getPersistentState().getLightsOffTime());
+                if (receivedState.isChangingLightsOffHour()) {
+                    proxy.getPersistentState().setLightsOffHour(receivedState.getPersistentState().getLightsOffHour());
+                }
+                if (receivedState.isChangingLightsOnMinute()) {
+                    proxy.getPersistentState().setLightsOnHour(receivedState.getPersistentState().getLightsOnMinute());
+                }
+                if (receivedState.isChangingLightsOffMinute()) {
+                    proxy.getPersistentState().setLightsOffHour(receivedState.getPersistentState().getLightsOffMinute());
                 }
                 if (receivedState.isChangingTargetUpperChamberHumidity()) {
                     proxy.getPersistentState().setTargetUpperChamberHumidity(receivedState.getPersistentState().getTargetUpperChamberHumidity());

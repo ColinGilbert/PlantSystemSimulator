@@ -122,7 +122,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         lastRecordedTime = currentTime;
         timeSinceLastUpdatePush += deltaTime;
 
-        if (timeSinceLastUpdatePush > proxy.getStatusPushInterval()) {
+        if (timeSinceLastUpdatePush > 100) {
             pushState();
             timeSinceLastUpdatePush = 0;
         }

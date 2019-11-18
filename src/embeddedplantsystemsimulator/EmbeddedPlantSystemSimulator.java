@@ -368,7 +368,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + proxy.getPersistentState().getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
-                // Code wart. Replace with a data-driven approach in version 2.
                 ArduinoConfigChangeRepresentation receivedState = objectMapper.readValue(message.toString().getBytes(), ArduinoConfigChangeRepresentation.class);
                 if (proxy.getPersistentState().getUid() != receivedState.getPersistentState().getUid()) {
                     log("LOGICAL ERROR: Received invalid UID as configuration. Our UID = " + proxy.getPersistentState().getUid() + ", assigned UID = " + receivedState.getPersistentState().getUid());

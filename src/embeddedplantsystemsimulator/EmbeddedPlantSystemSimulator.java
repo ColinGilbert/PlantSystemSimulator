@@ -107,6 +107,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         if (started) {
             final long currentTime = System.currentTimeMillis();
             final long lastRecordedTime = proxy.getTransientState().getTimestamp();
+            proxy.getTransientState().setTimestamp(currentTime);
             final long deltaTime = currentTime - lastRecordedTime;
             timeSinceLastUpdatePush += deltaTime;
             proxy.getTransientState().setPowered(true);
@@ -200,7 +201,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
             final boolean lights = shouldTheLightsBeOn(timeOfDay);
 
-            proxy.getTransientState().setLit(lights);
+   
 
             if (currentlyPowered) {
                 if (currentlyLit) {
@@ -240,9 +241,8 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             int lastRecordedCO2Level = Math.min(CommonValues.maxCO2PPM, proxy.getTransientState().getCurrentCO2PPM() + deltaCO2);
             lastRecordedCO2Level = Math.min(lastRecordedCO2Level, CommonValues.maxCO2PPM);
             proxy.getTransientState().setCurrentCO2PPM(lastRecordedCO2Level);
-
-            // TODO: Lights code 
-            proxy.getTransientState().setTimeLeftUnlocked(currentTime);
+         proxy.getTransientState().setLit(lights);
+         proxy.getTransientState().setTimeLeftUnlocked(currentTime);
         } else {
             started = true;
         }
@@ -267,7 +267,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     protected boolean shouldTheLightsBeOn(long currentTime) {
         final long onTime = proxy.getPersistentState().getLightsOnHour() * CommonValues.millisInHour + proxy.getPersistentState().getLightsOnMinute() * (long) CommonValues.millisInMin;
         final long offTime = proxy.getPersistentState().getLightsOffHour() * CommonValues.millisInHour + proxy.getPersistentState().getLightsOffMinute() * (long) CommonValues.millisInMin;
-
+ 
         if (onTime < 0 || offTime < 0) {
             return false;
         }
@@ -276,7 +276,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             results = true;
         } else if (offTime < onTime) { // The simple, straightforward case.
             results = currentTime > onTime && currentTime < offTime;
-        } else if (offTime > onTime) {
+        } else if (offTime > onTime) { // A slightly less simple case.
             if (currentTime > onTime) {
                 results = true;
             } else if (currentTime > offTime && currentTime > onTime) {

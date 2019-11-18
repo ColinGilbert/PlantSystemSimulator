@@ -51,21 +51,17 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     protected MqttConnectOptions connectionOptions;
 
     boolean started = false;
-
     double dehumidifyHumidityLossPerMin = 1.0d;
     double dehumidifyHeatPerMin = 0.3d;
     double coolingHeatLossPerMin = 1.0d;
     double lightsOnHeatGainPerMin = 0.1d;
     double lightsOnHumidityGainPerMin = 0.1d;
     double dissipativeHeatLossPerMin = 0.05d;
-    int co2InjectionPPMPerSec = 1000;
+    int co2InjectionPPMPerSec = 100;
     int lightsOnCO2LossPerMin = 10000;
-    long lastRecordedTime;
-
     long timeSinceLastMisting = 0;
     long currentMistingDuration = 0;
     long timeSinceLastUpdatePush = 0;
-
     final long lightsTimer = 15000;
     final long mistingTimer = 3000;
     final long coolingTimer = 7000;
@@ -108,142 +104,148 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     public void simulationLoop() {
+        if (started) {
+            final long currentTime = System.currentTimeMillis();
+            final long lastRecordedTime = proxy.getTransientState().getTimestamp();
+            final long deltaTime = currentTime - lastRecordedTime;
+            timeSinceLastUpdatePush += deltaTime;
+            proxy.getTransientState().setPowered(true);
+            if (timeSinceLastUpdatePush > 100) {
+                pushState();
+                timeSinceLastUpdatePush = 0;
+            }
+            // The following sends off random event notifications for display by the app.
+            boolean happening = random.nextBoolean();
+            lightsCounter -= deltaTime;
+            if (lightsCounter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setLit(true);
+                    pushEmbeddedEvent(EmbeddedEventType.LIGHTS_ON);
+                } else {
+                    proxy.getTransientState().setLit(false);
+                    pushEmbeddedEvent(EmbeddedEventType.LIGHTS_OFF);
+                }
+                lightsCounter = lightsTimer;
+            }
+            mistingCounter -= deltaTime;
+            if (mistingCounter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setMisting(true);
+                    pushEmbeddedEvent(EmbeddedEventType.MIST_ON);
+                } else {
+                    proxy.getTransientState().setMisting(false);
+                    pushEmbeddedEvent(EmbeddedEventType.MIST_OFF);
+                }
+                mistingCounter = mistingTimer;
+            }
+            coolingCounter -= deltaTime;
+            if (coolingCounter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setCooling(true);
+                    pushEmbeddedEvent(EmbeddedEventType.COOLING_ON);
 
-        final long currentTime = System.currentTimeMillis();
-        final long deltaTime = currentTime - lastRecordedTime;
-        lastRecordedTime = currentTime;
-        timeSinceLastUpdatePush += deltaTime;
-        proxy.getTransientState().setPowered(true);
-        if (timeSinceLastUpdatePush > 100) {
-            pushState();
-            timeSinceLastUpdatePush = 0;
-        }
-        // The following sends off random event notifications for display by the app.
-        boolean happening = random.nextBoolean();
-        lightsCounter -= deltaTime;
-        if (lightsCounter < 0) {
-            if (happening) {
-                proxy.getTransientState().setLit(true);
-                pushEmbeddedEvent(EmbeddedEventType.LIGHTS_ON);
-            } else {
-                proxy.getTransientState().setLit(false);
-                pushEmbeddedEvent(EmbeddedEventType.LIGHTS_OFF);
+                } else {
+                    proxy.getTransientState().setCooling(false);
+                    pushEmbeddedEvent(EmbeddedEventType.COOLING_OFF);
+                }
+                coolingCounter = coolingTimer;
             }
-            lightsCounter = lightsTimer;
-        }
-        mistingCounter -= deltaTime;
-        if (mistingCounter < 0) {
-            if (happening) {
-                proxy.getTransientState().setMisting(true);
-                pushEmbeddedEvent(EmbeddedEventType.MIST_ON);
-            } else {
-                proxy.getTransientState().setMisting(false);
-                pushEmbeddedEvent(EmbeddedEventType.MIST_OFF);
+            dehumidifyCounter -= deltaTime;
+            if (dehumidifyCounter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setDehumidifying(true);
+                    pushEmbeddedEvent(EmbeddedEventType.DEHUMIDIFIER_ON);
+                } else {
+                    proxy.getTransientState().setDehumidifying(false);
+                    pushEmbeddedEvent(EmbeddedEventType.DEHUMIDIFIER_OFF);
+                }
+                dehumidifyCounter = dehumidifyTimer;
             }
-            mistingCounter = mistingTimer;
-        }
-        coolingCounter -= deltaTime;
-        if (coolingCounter < 0) {
-            if (happening) {
-                proxy.getTransientState().setCooling(true);
-                pushEmbeddedEvent(EmbeddedEventType.COOLING_ON);
+            co2Counter -= deltaTime;
+            if (co2Counter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setInjectingCO2(true);
+                    pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_OPEN);
+                } else {
+                    proxy.getTransientState().setInjectingCO2(false);
+                    pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_CLOSED);
+                }
+                co2Counter = co2Timer;
+            }
+            lockedCounter -= deltaTime;
+            if (lockedCounter < 0) {
+                if (happening) {
+                    proxy.getTransientState().setLocked(true);
+                    pushEmbeddedEvent(EmbeddedEventType.DOORS_LOCKED);
+                } else {
+                    proxy.getTransientState().setLocked(false);
+                    pushEmbeddedEvent(EmbeddedEventType.DOORS_OPEN);
+                }
+                lockedCounter = lockedTimer;
+            }
 
-            } else {
-                proxy.getTransientState().setCooling(false);
-                pushEmbeddedEvent(EmbeddedEventType.COOLING_OFF);
-            }
-            coolingCounter = coolingTimer;
-        }
-        dehumidifyCounter -= deltaTime;
-        if (dehumidifyCounter < 0) {
-            if (happening) {
-                proxy.getTransientState().setDehumidifying(true);
-                pushEmbeddedEvent(EmbeddedEventType.DEHUMIDIFIER_ON);
-            } else {
-                proxy.getTransientState().setDehumidifying(false);
-                pushEmbeddedEvent(EmbeddedEventType.DEHUMIDIFIER_OFF);
-            }
-            dehumidifyCounter = dehumidifyTimer;
-        }
-        co2Counter -= deltaTime;
-        if (co2Counter < 0) {
-            if (happening) {
-                proxy.getTransientState().setInjectingCO2(true);
-                pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_OPEN);
-            } else {
-                proxy.getTransientState().setInjectingCO2(false);
-                pushEmbeddedEvent(EmbeddedEventType.CO2_VALVE_CLOSED);
-            }
-            co2Counter = co2Timer;
-        }
-        lockedCounter -= deltaTime;
-        if (lockedCounter < 0) {
-            if (happening) {
-                proxy.getTransientState().setLocked(true);
-                pushEmbeddedEvent(EmbeddedEventType.DOORS_LOCKED);
-            } else {
-                proxy.getTransientState().setLocked(false);
-                pushEmbeddedEvent(EmbeddedEventType.DOORS_OPEN);
-            }
-            lockedCounter = lockedTimer;
-        }
+            double deltaTemperature = 0.0d;
+            double deltaHumidity = 0.0d;
+            int deltaCO2 = 0;
 
-        double deltaTemperature = 0.0d;
-        double deltaHumidity = 0.0d;
-        int deltaCO2 = 0;
+            final boolean currentlyPowered = proxy.getTransientState().isPowered();
+            final boolean currentlyLit = proxy.getTransientState().isLit();
+            final boolean currentlyOpen = proxy.getTransientState().isOpen();
+            final boolean currentlyLocked = proxy.getTransientState().isLocked();
+            //final boolean currentlyMisting = proxy.getTransientState().isMisting();
+            final boolean currentlyDehumidifying = proxy.getTransientState().isDehumidifying();
+            final boolean currentlyCooling = proxy.getTransientState().isCooling();
+            final boolean currentlyInjectingCO2 = proxy.getTransientState().isInjectingCO2();
+            final long timeOfDay = currentTime % CommonValues.millisInDay;
 
-        final boolean currentlyPowered = proxy.getTransientState().isPowered();
-        final boolean currentlyLit = proxy.getTransientState().isLit();
-        final boolean currentlyOpen = proxy.getTransientState().isOpen();
-        final boolean currentlyLocked = proxy.getTransientState().isLocked();
-        //final boolean currentlyMisting = proxy.getTransientState().isMisting();
-        final boolean currentlyDehumidifying = proxy.getTransientState().isDehumidifying();
-        final boolean currentlyCooling = proxy.getTransientState().isCooling();
-        final boolean currentlyInjectingCO2 = proxy.getTransientState().isInjectingCO2();
-        final long timeOfDay = currentTime % CommonValues.millisInDay;
+            final boolean lights = shouldTheLightsBeOn(timeOfDay);
 
-        final boolean lights = shouldTheLightsBeOn(timeOfDay);
+            proxy.getTransientState().setLit(lights);
 
-        proxy.getTransientState().setLit(lights);
-
-        if (currentlyPowered) {
-            if (currentlyLit) {
-                deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / CommonValues.millisInMin;
-                deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / CommonValues.millisInMin;
-                deltaCO2 -= (long) ((double) deltaTime * lightsOnCO2LossPerMin / CommonValues.millisInMin);
-            }
-            if (currentlyDehumidifying) {
-                deltaHumidity -= (double) deltaTime * dehumidifyHumidityLossPerMin / CommonValues.millisInMin;
-            }
-            if (currentlyCooling) {
-                deltaTemperature -= (double) deltaTime * coolingHeatLossPerMin / CommonValues.millisInMin;
-            }
-            if (currentlyInjectingCO2) {
-                deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / CommonValues.millisInSec;
-            }
-            if (!currentlyOpen) {
-                if (!currentlyLocked) {
-                    long lastRecordedTimeLeftUnlocked = proxy.getTransientState().getTimeLeftUnlocked();
-                    long timeLeftUnlocked = lastRecordedTimeLeftUnlocked - deltaTime;
-                    if (timeLeftUnlocked < 1) {
-                        proxy.getTransientState().setLocked(false);
-                        proxy.getTransientState().setTimeLeftUnlocked(0);
+            if (currentlyPowered) {
+                if (currentlyLit) {
+                    deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / CommonValues.millisInMin;
+                    deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / CommonValues.millisInMin;
+                    deltaCO2 -= (long) ((double) deltaTime * lightsOnCO2LossPerMin / CommonValues.millisInMin);
+                }
+                if (currentlyDehumidifying) {
+                    deltaHumidity -= (double) deltaTime * dehumidifyHumidityLossPerMin / CommonValues.millisInMin;
+                }
+                if (currentlyCooling) {
+                    deltaTemperature -= (double) deltaTime * coolingHeatLossPerMin / (double) CommonValues.millisInMin;
+                }
+                if (currentlyInjectingCO2) {
+                    deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / CommonValues.millisInSec;
+                }
+                if (!currentlyOpen) {
+                    if (!currentlyLocked) {
+                        long lastRecordedTimeLeftUnlocked = proxy.getTransientState().getTimeLeftUnlocked();
+                        long timeLeftUnlocked = lastRecordedTimeLeftUnlocked - deltaTime;
+                        if (timeLeftUnlocked < 1) {
+                            proxy.getTransientState().setLocked(false);
+                            proxy.getTransientState().setTimeLeftUnlocked(0);
+                        }
                     }
                 }
             }
-        }
-        deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / CommonValues.millisInMin;
-        int lastRecordedCO2Level = proxy.getTransientState().getCurrentCO2PPM();
-        float lastRecordedTemperature = proxy.getTransientState().getCurrentUpperChamberTemperature();
-        float lastRecordedHumidity = proxy.getTransientState().getCurrentUpperChamberHumidity();
-        proxy.getTransientState().setCurrentCO2PPM(Math.max(0, lastRecordedCO2Level + deltaCO2));
-        float upperChamberTemperature = Math.min(CommonValues.maxPossibleTemperature, Math.max((float) (lastRecordedTemperature + deltaTemperature), CommonValues.minPossibleTemperature));
-        proxy.getTransientState().setCurrentUpperChamberTemperature(upperChamberTemperature);
-        float upperChamberHumidity = Math.min(CommonValues.maxHumidity, Math.max((float) (lastRecordedHumidity + deltaHumidity), 0.f));
-        proxy.getTransientState().setCurrentUpperChamberHumidity(upperChamberHumidity);
+            deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / CommonValues.millisInMin;
+            float lastRecordedTemperature = proxy.getTransientState().getCurrentUpperChamberTemperature();
+            float lastRecordedHumidity = proxy.getTransientState().getCurrentUpperChamberHumidity();
+            float upperChamberTemperature = Math.min(CommonValues.maxPossibleTemperature, lastRecordedTemperature + (float) deltaTemperature);
+            upperChamberTemperature = Math.max(upperChamberTemperature, CommonValues.minPossibleTemperature);
+            proxy.getTransientState().setCurrentUpperChamberTemperature(upperChamberTemperature);
+            float upperChamberHumidity = Math.min(CommonValues.maxHumidity, lastRecordedHumidity + (float) deltaHumidity);
+            upperChamberHumidity = Math.max(upperChamberHumidity, CommonValues.minHumidity);
+            proxy.getTransientState().setCurrentUpperChamberHumidity(upperChamberHumidity);
+            int lastRecordedCO2Level = Math.min(CommonValues.maxCO2PPM, proxy.getTransientState().getCurrentCO2PPM() + deltaCO2);
+            lastRecordedCO2Level = Math.min(lastRecordedCO2Level, CommonValues.maxCO2PPM);
+            proxy.getTransientState().setCurrentCO2PPM(lastRecordedCO2Level);
 
-        // TODO: Lights code 
-        lastRecordedTime = currentTime;
+            // TODO: Lights code 
+            proxy.getTransientState().setTimeLeftUnlocked(currentTime);
+        } else {
+            started = true;
+        }
     }
 
     protected void pushEmbeddedEvent(EmbeddedEventType ev) {

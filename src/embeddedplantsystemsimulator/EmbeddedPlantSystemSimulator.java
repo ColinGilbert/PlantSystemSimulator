@@ -241,8 +241,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             int lastRecordedCO2Level = Math.min(CommonValues.maxCO2PPM, proxy.getTransientState().getCurrentCO2PPM() + deltaCO2);
             lastRecordedCO2Level = Math.min(lastRecordedCO2Level, CommonValues.maxCO2PPM);
             proxy.getTransientState().setCurrentCO2PPM(lastRecordedCO2Level);
-         proxy.getTransientState().setLit(lights);
-         proxy.getTransientState().setTimeLeftUnlocked(currentTime);
+             proxy.getTransientState().setTimeLeftUnlocked(currentTime);
         } else {
             started = true;
         }

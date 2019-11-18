@@ -41,23 +41,16 @@ import java.util.logging.Logger;
 import noob.plantsystem.common.*;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
-    final double MILLIS_IN_SEC = 1000.0d;
-    final double MILLIS_IN_MIN = 60000.0d;
-    final long MILLIS_IN_HOUR = 3600000;
-    final long MILLIS_IN_DAY = 86400000;
+
     protected ArduinoProxy proxy = new ArduinoProxy();
     protected boolean stateLoaded = false;
     protected boolean logging = true;
-    final protected String brokerURL = "tcp://127.0.0.1:1883";
     protected MemoryPersistence persistence;
     protected long deltaTime;
     protected MqttClient client;
     protected MqttConnectOptions connectionOptions;
 
     boolean started = false;
-
-    float maxTemperature = 60.0f;
-    float minTemperature = 10.0f;
 
     double dehumidifyHumidityLossPerMin = 1.0d;
     double dehumidifyHeatPerMin = 0.3d;
@@ -66,7 +59,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     double lightsOnHumidityGainPerMin = 0.1d;
     double dissipativeHeatLossPerMin = 0.05d;
     int co2InjectionPPMPerSec = 1000;
-    int lightsOnCO2LossPerMin = 1000;
+    int lightsOnCO2LossPerMin = 10000;
     long lastRecordedTime;
 
     long timeSinceLastMisting = 0;
@@ -81,13 +74,11 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     final long lockedTimer = 9000;
 
     EmbeddedPlantSystemSimulator() {
+        this(new Random().nextLong());
+    }
 
+    EmbeddedPlantSystemSimulator(long uid) {
         proxy = ArduinoProxySaneDefaultsFactory.get();
-
-        proxy.getTransientState().setCurrentUpperChamberTemperature(23.0f);
-        proxy.getTransientState().setCurrentLowerChamberTemperature(18.0f);
-        proxy.getTransientState().setCurrentUpperChamberHumidity(50.0f);
-
         connectionOptions = new MqttConnectOptions();
         connectionOptions.setCleanSession(true);
     }
@@ -104,7 +95,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     void init(long uid) {
         proxy.getPersistentState().setUid(uid);
         try {
-            client = new MqttClient(brokerURL, MqttClient.generateClientId(), new MemoryPersistence());
+            client = new MqttClient(CommonValues.mqttBrokerURL, MqttClient.generateClientId(), new MemoryPersistence());
             client.setCallback(this);
 
         } catch (MqttException ex) {
@@ -122,14 +113,13 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         final long deltaTime = currentTime - lastRecordedTime;
         lastRecordedTime = currentTime;
         timeSinceLastUpdatePush += deltaTime;
-
+        proxy.getTransientState().setPowered(true);
         if (timeSinceLastUpdatePush > 100) {
             pushState();
             timeSinceLastUpdatePush = 0;
         }
+        // The following sends off random event notifications for display by the app.
         boolean happening = random.nextBoolean();
-        ArduinoEvent ev = new ArduinoEvent();
-
         lightsCounter -= deltaTime;
         if (lightsCounter < 0) {
             if (happening) {
@@ -206,32 +196,30 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         final boolean currentlyLit = proxy.getTransientState().isLit();
         final boolean currentlyOpen = proxy.getTransientState().isOpen();
         final boolean currentlyLocked = proxy.getTransientState().isLocked();
-        final boolean currentlyMisting = proxy.getTransientState().isMisting();
+        //final boolean currentlyMisting = proxy.getTransientState().isMisting();
         final boolean currentlyDehumidifying = proxy.getTransientState().isDehumidifying();
         final boolean currentlyCooling = proxy.getTransientState().isCooling();
         final boolean currentlyInjectingCO2 = proxy.getTransientState().isInjectingCO2();
+        final long timeOfDay = currentTime % CommonValues.millisInDay;
 
- 
-        final long timeOfDay = currentTime % MILLIS_IN_DAY;
-        
         final boolean lights = shouldTheLightsBeOn(timeOfDay);
 
         proxy.getTransientState().setLit(lights);
 
         if (currentlyPowered) {
             if (currentlyLit) {
-                deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / MILLIS_IN_MIN;
-                deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / MILLIS_IN_MIN;
-                deltaCO2 -= (long) ((double) deltaTime * lightsOnCO2LossPerMin / MILLIS_IN_MIN);
+                deltaTemperature += (double) deltaTime * lightsOnHeatGainPerMin / CommonValues.millisInMin;
+                deltaHumidity += (double) deltaTime * lightsOnHumidityGainPerMin / CommonValues.millisInMin;
+                deltaCO2 -= (long) ((double) deltaTime * lightsOnCO2LossPerMin / CommonValues.millisInMin);
             }
             if (currentlyDehumidifying) {
-                deltaHumidity -= (double) deltaTime * dehumidifyHumidityLossPerMin / MILLIS_IN_MIN;
+                deltaHumidity -= (double) deltaTime * dehumidifyHumidityLossPerMin / CommonValues.millisInMin;
             }
             if (currentlyCooling) {
-                deltaTemperature -= (double) deltaTime * coolingHeatLossPerMin / MILLIS_IN_MIN;
+                deltaTemperature -= (double) deltaTime * coolingHeatLossPerMin / CommonValues.millisInMin;
             }
             if (currentlyInjectingCO2) {
-                deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / MILLIS_IN_SEC;
+                deltaCO2 += (long) (double) deltaTime * co2InjectionPPMPerSec / CommonValues.millisInSec;
             }
             if (!currentlyOpen) {
                 if (!currentlyLocked) {
@@ -244,14 +232,14 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                 }
             }
         }
-        deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / MILLIS_IN_MIN;
+        deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / CommonValues.millisInMin;
         int lastRecordedCO2Level = proxy.getTransientState().getCurrentCO2PPM();
-        double lastRecordedTemperature = (double) proxy.getTransientState().getCurrentUpperChamberTemperature();
-        double lastRecordedHumidity = (double) proxy.getTransientState().getCurrentUpperChamberHumidity();
+        float lastRecordedTemperature = proxy.getTransientState().getCurrentUpperChamberTemperature();
+        float lastRecordedHumidity = proxy.getTransientState().getCurrentUpperChamberHumidity();
         proxy.getTransientState().setCurrentCO2PPM(Math.max(0, lastRecordedCO2Level + deltaCO2));
-        float upperChamberTemperature = Math.min(maxTemperature, Math.max((float) (lastRecordedTemperature + deltaTemperature), minTemperature));
+        float upperChamberTemperature = Math.min(CommonValues.maxPossibleTemperature, Math.max((float) (lastRecordedTemperature + deltaTemperature), CommonValues.minPossibleTemperature));
         proxy.getTransientState().setCurrentUpperChamberTemperature(upperChamberTemperature);
-        float upperChamberHumidity = Math.min(100.f, Math.max((float) (lastRecordedHumidity + deltaHumidity), 0.f));
+        float upperChamberHumidity = Math.min(CommonValues.maxHumidity, Math.max((float) (lastRecordedHumidity + deltaHumidity), 0.f));
         proxy.getTransientState().setCurrentUpperChamberHumidity(upperChamberHumidity);
 
         // TODO: Lights code 
@@ -275,9 +263,9 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     protected boolean shouldTheLightsBeOn(long currentTime) {
-        final long onTime = proxy.getPersistentState().getLightsOnHour() * MILLIS_IN_HOUR + proxy.getPersistentState().getLightsOnMinute()*(long)MILLIS_IN_MIN;
-        final long offTime = proxy.getPersistentState().getLightsOffHour() * MILLIS_IN_HOUR + proxy.getPersistentState().getLightsOffMinute()*(long)MILLIS_IN_MIN;
-        
+        final long onTime = proxy.getPersistentState().getLightsOnHour() * CommonValues.millisInHour + proxy.getPersistentState().getLightsOnMinute() * (long) CommonValues.millisInMin;
+        final long offTime = proxy.getPersistentState().getLightsOffHour() * CommonValues.millisInHour + proxy.getPersistentState().getLightsOffMinute() * (long) CommonValues.millisInMin;
+
         if (onTime < 0 || offTime < 0) {
             return false;
         }
@@ -297,7 +285,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     public void connect() {
-        connect(brokerURL);
+        connect(CommonValues.mqttBrokerURL);
         subscribeToEmbeddedConfigPush();
     }
 
@@ -322,7 +310,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         // Connect to the MQTT server
         try {
             client.connect(connectionOptions);
-            log("Connected to " + brokerURL + " with client ID " + client.getClientId());
+            log("Connected to " + CommonValues.mqttBrokerURL + " with client ID " + client.getClientId());
         } catch (MqttSecurityException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         } catch (MqttException ex) {

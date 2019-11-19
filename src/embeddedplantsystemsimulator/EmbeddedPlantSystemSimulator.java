@@ -5,40 +5,21 @@
  */
 package embeddedplantsystemsimulator;
 
-import noob.plantsystem.common.EmbeddedEventType;
-import com.fasterxml.jackson.core.JsonEncoding;
-import com.fasterxml.jackson.core.JsonGenerator;
-import java.io.IOException;
-import java.io.ByteArrayOutputStream;
-import java.lang.Math;
-
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttSecurityException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.core.json.JsonFactory;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
-import com.fasterxml.jackson.core.TokenStreamFactory;
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import java.util.Arrays;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import noob.plantsystem.common.*;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.MqttSecurityException;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
@@ -232,16 +213,16 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / CommonValues.millisInMin;
             float lastRecordedTemperature = proxy.getTransientState().getCurrentUpperChamberTemperature();
             float lastRecordedHumidity = proxy.getTransientState().getCurrentUpperChamberHumidity();
-            float upperChamberTemperature = Math.min(CommonValues.maxPossibleTemperature, lastRecordedTemperature + (float) deltaTemperature);
+            float upperChamberTemperature = Math.min(CommonValues.maxPossibleTemperature, Math.abs(lastRecordedTemperature + (float) deltaTemperature));
             upperChamberTemperature = Math.max(upperChamberTemperature, CommonValues.minPossibleTemperature);
             proxy.getTransientState().setCurrentUpperChamberTemperature(upperChamberTemperature);
-            float upperChamberHumidity = Math.min(CommonValues.maxHumidity, lastRecordedHumidity + (float) deltaHumidity);
+            float upperChamberHumidity = Math.min(CommonValues.maxHumidity, Math.abs(lastRecordedHumidity + (float) deltaHumidity));
             upperChamberHumidity = Math.max(upperChamberHumidity, CommonValues.minHumidity);
             proxy.getTransientState().setCurrentUpperChamberHumidity(upperChamberHumidity);
-            int lastRecordedCO2Level = Math.min(CommonValues.maxCO2PPM, proxy.getTransientState().getCurrentCO2PPM() + deltaCO2);
+            int lastRecordedCO2Level = Math.min(CommonValues.maxCO2PPM, Math.abs(proxy.getTransientState().getCurrentCO2PPM() + deltaCO2));
             lastRecordedCO2Level = Math.min(lastRecordedCO2Level, CommonValues.maxCO2PPM);
             proxy.getTransientState().setCurrentCO2PPM(lastRecordedCO2Level);
-             proxy.getTransientState().setTimeLeftUnlocked(currentTime);
+            proxy.getTransientState().setTimeLeftUnlocked(currentTime);
         } else {
             started = true;
         }

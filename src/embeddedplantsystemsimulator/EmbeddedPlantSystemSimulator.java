@@ -23,7 +23,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 public class EmbeddedPlantSystemSimulator implements MqttCallback {
 
-    protected EmbeddedSystemProxy proxy = new EmbeddedSystemProxy();
+    protected EmbeddedSystemCombinedStateMemento proxy = new EmbeddedSystemCombinedStateMemento();
     protected boolean stateLoaded = false;
     protected boolean logging = true;
     protected MemoryPersistence persistence;
@@ -55,7 +55,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     EmbeddedPlantSystemSimulator(long uid) {
-        proxy = EmbeddedSystemProxySaneDefaultsFactory.get();
+        proxy = EmbeddedSystemStateSaneDefaultsFactory.get();
         connectionOptions = new MqttConnectOptions();
         connectionOptions.setCleanSession(true);
     }
@@ -338,7 +338,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
         if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + proxy.getPersistentState().getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
-                EmbeddedSystemConfigChange receivedState = objectMapper.readValue(message.toString().getBytes(), EmbeddedSystemConfigChange.class);
+                EmbeddedSystemConfigChangeMemento receivedState = objectMapper.readValue(message.toString().getBytes(), EmbeddedSystemConfigChangeMemento.class);
                 if (proxy.getPersistentState().getUid() != receivedState.getPersistentState().getUid()) {
                     log("LOGICAL ERROR: Received invalid UID as configuration. Our UID = " + proxy.getPersistentState().getUid() + ", assigned UID = " + receivedState.getPersistentState().getUid());
                     return;

@@ -177,7 +177,6 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             final boolean currentlyInjectingCO2 = systemState.getTransientState().isInjectingCO2();
             final long timeOfDay = currentTime % CommonValues.millisInDay;
 
-            final boolean lights = shouldTheLightsBeOn(timeOfDay);
 
             if (currentlyPowered) {
                 if (currentlyLit) {
@@ -205,6 +204,8 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
                     }
                 }
             }
+            final boolean lights = shouldTheLightsBeOn(timeOfDay);
+            systemState.getTransientState().setLit(lights);
             deltaTemperature -= (double) deltaTime * dissipativeHeatLossPerMin / CommonValues.millisInMin;
             float lastRecordedTemperature = systemState.getTransientState().getCurrentUpperChamberTemperature();
             float lastRecordedHumidity = systemState.getTransientState().getCurrentUpperChamberHumidity();

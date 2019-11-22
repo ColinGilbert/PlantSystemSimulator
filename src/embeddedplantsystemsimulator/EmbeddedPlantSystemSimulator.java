@@ -234,7 +234,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             return;
         }
         try {
-            publish(TopicStrings.embeddedEvent() + "/" + systemState.getPersistentState().getUid(), 0, message.getBytes());
+            publish(CommonValues.pushEventFromEmbeddedTopic + "/" + systemState.getPersistentState().getUid(), 0, message.getBytes());
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -278,7 +278,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
             return;
         }
         try {
-            publish(TopicStrings.embeddedStatePush(), 0, message.getBytes());
+            publish(CommonValues.pushStatusToBackendTopic, 0, message.getBytes());
         } catch (MqttException ex) {
             Logger.getLogger(EmbeddedPlantSystemSimulator.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -305,7 +305,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     }
 
     protected void subscribeToEmbeddedConfigPush() {
-        String topic = TopicStrings.configPushToEmbedded() + "/" + systemState.getPersistentState().getUid();
+        String topic = CommonValues.pushConfigToEmbeddedTopic + "/" + systemState.getPersistentState().getUid();
         try {
             client.subscribe(topic);
         } catch (MqttException ex) {
@@ -331,7 +331,7 @@ public class EmbeddedPlantSystemSimulator implements MqttCallback {
     public void messageArrived(String topicArg, MqttMessage message) throws MqttException {
         //  log("MQTT message received. Topic = " + topicArg + ", message = " + message);
 
-        if (topicArg.equals(TopicStrings.configPushToEmbedded() + "/" + systemState.getPersistentState().getUid())) {
+        if (topicArg.equals(CommonValues.pushConfigToEmbeddedTopic + "/" + systemState.getPersistentState().getUid())) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
                 EmbeddedSystemConfigChangeMemento receivedState = objectMapper.readValue(message.toString().getBytes(), EmbeddedSystemConfigChangeMemento.class);
